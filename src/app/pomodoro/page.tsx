@@ -13,16 +13,16 @@ type Settings = {
 };
 
 const MODE_LABEL: Record<Mode, string> = {
-  work: "專注工作",
-  short: "短休息",
-  long: "長休息",
+  work: "認真學習",
+  short: "休息一下",
+  long: "好好休息",
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  work: 25,
+  work: 20,
   shortBreak: 5,
   longBreak: 15,
-  longBreakInterval: 4,
+  longBreakInterval: 3,
 };
 
 const RADIUS = 120;
@@ -71,19 +71,24 @@ export default function PomodoroPage() {
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_SETTINGS.work * 60);
   const [running, setRunning] = useState(false);
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
+  const [celebrate, setCelebrate] = useState(false);
   const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | "unsupported">(
     "unsupported"
   );
 
   useEffect(() => {
     if (typeof Notification !== "undefined") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reading a browser-only API, must defer past hydration
       setNotifyPermission(Notification.permission);
     }
   }, []);
 
   // keep the paused clock in sync with settings edits
   useEffect(() => {
-    if (!running) setSecondsLeft(durationFor(mode, settings));
+    if (!running) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the paused countdown when settings change
+      setSecondsLeft(durationFor(mode, settings));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
@@ -96,7 +101,7 @@ export default function PomodoroPage() {
 
         playChime();
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          new Notification(mode === "work" ? "🍅 時間到，休息一下吧！" : "🍅 休息結束，回來專注囉！");
+          new Notification(mode === "work" ? "🍅 時間到，休息一下吧！" : "🍅 休息結束，回來認真學習囉！");
         }
 
         if (mode === "work") {
@@ -104,6 +109,7 @@ export default function PomodoroPage() {
           setCompletedPomodoros(nextCompleted);
           const nextMode: Mode = nextCompleted % settings.longBreakInterval === 0 ? "long" : "short";
           setMode(nextMode);
+          setCelebrate(true);
           return durationFor(nextMode, settings);
         }
         setMode("work");
@@ -115,7 +121,7 @@ export default function PomodoroPage() {
 
   // reflect countdown in the tab title
   useEffect(() => {
-    document.title = `${formatTime(secondsLeft)} · ${MODE_LABEL[mode]} – 番茄鐘`;
+    document.title = `${formatTime(secondsLeft)} · ${MODE_LABEL[mode]} – 學習計時器`;
     return () => {
       document.title = "學習小幫手";
     };
@@ -126,16 +132,21 @@ export default function PomodoroPage() {
   }
 
   function toggleRunning() {
-    setRunning((r) => !r);
+    setRunning((r) => {
+      if (!r) setCelebrate(false);
+      return !r;
+    });
   }
 
   function resetCurrentSession() {
     setRunning(false);
+    setCelebrate(false);
     setSecondsLeft(durationFor(mode, settings));
   }
 
   function skipSession() {
     setRunning(false);
+    setCelebrate(false);
     if (mode === "work") {
       const nextCompleted = completedPomodoros + 1;
       setCompletedPomodoros(nextCompleted);
@@ -150,6 +161,7 @@ export default function PomodoroPage() {
 
   function resetAll() {
     setRunning(false);
+    setCelebrate(false);
     setMode("work");
     setCompletedPomodoros(0);
     setSecondsLeft(durationFor("work", settings));
@@ -179,15 +191,23 @@ export default function PomodoroPage() {
       </div>
 
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-stone-800 dark:text-stone-100">🍅 番茄鐘</h1>
+        <h1 className="text-3xl font-bold text-stone-800 dark:text-stone-100">🍅 小朋友學習計時器</h1>
         <p className="mt-2 text-stone-500 dark:text-stone-400">
-          專注 {settings.work} 分鐘，休息一下，保持工作節奏。
+          認真讀書 {settings.work} 分鐘，休息一下，養成專心的好習慣！
         </p>
       </div>
 
       <div className="flex w-full max-w-md flex-col items-center gap-6">
-        <div className="relative flex h-[280px] w-[280px] items-center justify-center">
-          <svg width="280" height="280" viewBox="0 0 280 280" className="-rotate-90">
+        {celebrate && (
+          <div
+            key={completedPomodoros}
+            className="animate-stamp-pop rounded-full border-2 border-dashed border-[#D97757] bg-[#D97757]/10 px-5 py-2 text-sm font-semibold text-[#C6684A]"
+          >
+            🌟 太棒了，完成一次認真學習！
+          </div>
+        )}
+        <div className="relative flex aspect-square w-[78vw] max-w-[280px] items-center justify-center">
+          <svg viewBox="0 0 280 280" className="h-full w-full -rotate-90">
             <circle
               cx="140"
               cy="140"
@@ -230,7 +250,7 @@ export default function PomodoroPage() {
           ))}
         </div>
         <p className="text-sm text-stone-500 dark:text-stone-400">
-          已完成 {completedPomodoros} 個番茄鐘
+          已經完成 {completedPomodoros} 次認真學習囉！
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-3">
@@ -238,7 +258,7 @@ export default function PomodoroPage() {
             onClick={toggleRunning}
             className="rounded-full bg-[#D97757] px-8 py-3 text-lg font-bold text-white shadow-md transition hover:bg-[#C6684A]"
           >
-            {running ? "暫停" : secondsLeft === totalForMode ? "開始" : "繼續"}
+            {running ? "暫停" : secondsLeft === totalForMode ? "開始學習" : "繼續"}
           </button>
           <button
             onClick={resetCurrentSession}
@@ -257,7 +277,7 @@ export default function PomodoroPage() {
           onClick={resetAll}
           className="text-sm font-medium text-stone-400 hover:text-[#C97B6B]"
         >
-          重設整個進度
+          全部重新開始
         </button>
 
         {notifyPermission === "default" && (
@@ -271,10 +291,10 @@ export default function PomodoroPage() {
       </div>
 
       <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-[#FFFDF9]/90 p-6 shadow-sm dark:border-stone-700/60 dark:bg-[#241F1A]/70">
-        <h2 className="mb-4 text-lg font-bold text-stone-800 dark:text-stone-100">⏱️ 時間設定（分鐘）</h2>
+        <h2 className="mb-4 text-lg font-bold text-stone-800 dark:text-stone-100">⏱️ 時間設定（家長可調整，分鐘）</h2>
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium text-stone-600 dark:text-stone-300">
-            專注時間
+            學習時間
             <input
               type="number"
               min={1}

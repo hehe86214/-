@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Stamp = {
@@ -9,6 +9,8 @@ type Stamp = {
   message: string;
   color: string;
 };
+
+type HistoryMap = Record<string, Stamp>;
 
 const STAMPS: Stamp[] = [
   { emoji: "🌟", title: "閃亮之星", message: "今天的你超級閃耀，繼續發光發熱！", color: "#D98E73" },
@@ -25,29 +27,70 @@ const STAMPS: Stamp[] = [
   { emoji: "⭐", title: "小巨星", message: "你是今天的最佳表現！", color: "#8497B0" },
 ];
 
-const TODAY = new Date().toLocaleDateString("zh-TW", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  weekday: "long",
-});
+const STORAGE_KEY = "lucky-draw-history";
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+
+function dateKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export default function LuckyDrawPage() {
-  const [current, setCurrent] = useState<Stamp | null>(null);
-  const [drawCount, setDrawCount] = useState(0);
-  const [history, setHistory] = useState<Stamp[]>([]);
+  const [now] = useState(() => new Date());
+  const [history, setHistory] = useState<HistoryMap>({});
+  const [loaded, setLoaded] = useState(false);
+
+  const todayKey = dateKey(now);
+  const todayLabel = now.toLocaleDateString("zh-TW", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reading browser-only localStorage, must defer past hydration
+      if (raw) setHistory(JSON.parse(raw));
+    } catch {
+      // ignore corrupted/unavailable storage
+    }
+    setLoaded(true);
+  }, []);
+
+  const todayStamp = history[todayKey];
 
   function draw() {
+    if (todayStamp) return;
     const stamp = STAMPS[Math.floor(Math.random() * STAMPS.length)];
-    setCurrent(stamp);
-    setDrawCount((c) => c + 1);
-    setHistory((prev) => [stamp, ...prev].slice(0, 8));
+    const next = { ...history, [todayKey]: stamp };
+    setHistory(next);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignore unavailable storage
+    }
   }
 
   function clearHistory() {
-    setCurrent(null);
-    setHistory([]);
+    if (!window.confirm("確定要清除所有集點章紀錄嗎？這個動作無法復原。")) return;
+    setHistory({});
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore unavailable storage
+    }
   }
+
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leadingBlanks = new Date(year, month, 1).getDay();
+  const monthLabel = now.toLocaleDateString("zh-TW", { year: "numeric", month: "long" });
+  const totalCollected = Object.keys(history).length;
 
   return (
     <div className="flex flex-1 flex-col items-center gap-8 bg-gradient-to-b from-[#FBF4EA] to-[#FDFAF5] px-6 py-12 dark:from-[#221D18] dark:to-[#171310]">
@@ -61,71 +104,95 @@ export default function LuckyDrawPage() {
       </div>
 
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-stone-800 dark:text-stone-100">🎐 好運抽籤</h1>
-        <p className="mt-2 text-stone-500 dark:text-stone-400">{TODAY}</p>
-        <p className="mt-1 text-stone-500 dark:text-stone-400">抽一張籤，看看你今天表現得多棒！</p>
+        <h1 className="text-3xl font-bold text-stone-800 dark:text-stone-100">🎫 棒棒集點章</h1>
+        <p className="mt-2 text-stone-500 dark:text-stone-400">{todayLabel}</p>
+        <p className="mt-1 text-stone-500 dark:text-stone-400">
+          每天可以抽一次印章，看看今天表現得多棒！
+        </p>
       </div>
 
       <div className="flex flex-col items-center gap-6">
-        <div className="flex h-64 w-64 items-center justify-center">
-          {current ? (
+        <div className="flex aspect-square w-[70vw] max-w-[256px] items-center justify-center">
+          {todayStamp ? (
             <div
-              key={drawCount}
-              className="animate-stamp-pop flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed text-center"
-              style={{ borderColor: current.color, backgroundColor: `${current.color}1A` }}
+              className="animate-stamp-pop flex h-[90%] w-[90%] flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed text-center"
+              style={{ borderColor: todayStamp.color, backgroundColor: `${todayStamp.color}1A` }}
             >
-              <span className="text-6xl">{current.emoji}</span>
-              <p className="px-4 text-xl font-bold" style={{ color: current.color }}>
-                {current.title}
+              <span className="text-6xl">{todayStamp.emoji}</span>
+              <p className="px-4 text-xl font-bold" style={{ color: todayStamp.color }}>
+                {todayStamp.title}
               </p>
             </div>
           ) : (
-            <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed border-stone-300 text-stone-400 dark:border-stone-700">
+            <div className="flex h-[90%] w-[90%] flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed border-stone-300 text-stone-400 dark:border-stone-700">
               <span className="text-5xl">🎁</span>
-              <p className="text-sm">還沒抽過喔</p>
+              <p className="text-sm">今天還沒蓋章喔</p>
             </div>
           )}
         </div>
 
-        {current && (
+        {todayStamp && (
           <p className="max-w-xs text-center text-lg font-medium text-stone-700 dark:text-stone-200">
-            {current.message}
+            {todayStamp.message}
           </p>
         )}
 
         <button
           onClick={draw}
-          className="rounded-full bg-[#D97757] px-8 py-3 text-lg font-bold text-white shadow-md transition hover:bg-[#C6684A]"
+          disabled={!loaded || !!todayStamp}
+          className="rounded-full bg-[#D97757] px-8 py-3 text-lg font-bold text-white shadow-md transition hover:bg-[#C6684A] disabled:cursor-not-allowed disabled:bg-stone-300"
         >
-          {current ? "再抽一次" : "🥠 抽一張好棒棒籤"}
+          {todayStamp ? "今天已經蓋過章囉" : "🥠 抽一張今日印章"}
         </button>
+        {todayStamp && (
+          <p className="text-sm text-stone-400">明天再回來抽下一張吧！</p>
+        )}
       </div>
 
-      {history.length > 0 && (
-        <div className="flex w-full max-w-2xl flex-col items-center gap-3">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-stone-500 dark:text-stone-400">今天抽過的籤</p>
-            <button
-              onClick={clearHistory}
-              className="text-sm font-medium text-stone-400 hover:text-[#C97B6B]"
-            >
-              清除紀錄
-            </button>
-          </div>
-          <ul className="flex flex-wrap justify-center gap-2">
-            {history.map((stamp, i) => (
-              <li
-                key={i}
-                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium"
-                style={{ backgroundColor: `${stamp.color}1A`, color: stamp.color }}
-              >
-                <span>{stamp.emoji}</span>
-                {stamp.title}
-              </li>
-            ))}
-          </ul>
+      <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-[#FFFDF9]/90 p-6 shadow-sm dark:border-stone-700/60 dark:bg-[#241F1A]/70">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-stone-800 dark:text-stone-100">📅 {monthLabel}集章表</h2>
+          <button
+            onClick={clearHistory}
+            className="text-sm font-medium text-stone-400 hover:text-[#C97B6B]"
+          >
+            清除紀錄
+          </button>
         </div>
-      )}
+        <div className="mb-2 grid grid-cols-7 gap-1.5 text-center text-xs font-medium text-stone-400">
+          {WEEKDAYS.map((w) => (
+            <span key={w}>{w}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {Array.from({ length: leadingBlanks }).map((_, i) => (
+            <div key={`blank-${i}`} />
+          ))}
+          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+            const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            const stamp = history[key];
+            const isToday = key === todayKey;
+            return (
+              <div
+                key={key}
+                className={`flex aspect-square flex-col items-center justify-center rounded-lg text-xs ${
+                  isToday ? "ring-2 ring-[#D97757]" : ""
+                }`}
+                style={{ backgroundColor: stamp ? `${stamp.color}1A` : "transparent" }}
+              >
+                {stamp ? (
+                  <span className="text-lg leading-none">{stamp.emoji}</span>
+                ) : (
+                  <span className="text-stone-300 dark:text-stone-700">{day}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-4 text-center text-sm font-medium text-stone-500 dark:text-stone-400">
+          已經集了 {totalCollected} 個印章囉！
+        </p>
+      </div>
     </div>
   );
 }
